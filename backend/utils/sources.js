@@ -1,51 +1,65 @@
 const SOURCE_WEIGHTS = {
-    // Tier 1 — International wire services (most reliable)
-    "reuters.com": { weight: 1.00, tier: 1 },
-    "apnews.com": { weight: 1.00, tier: 1 },
-    "bbc.com": { weight: 0.95, tier: 1 },
-    "bbc.co.uk": { weight: 0.95, tier: 1 },
-    "npr.org": { weight: 0.90, tier: 1 },
+    // ── TIER 1: International wire services ──
+    "reuters.com":        { weight: 1.00, tier: 1, name: "Reuters" },
+    "apnews.com":         { weight: 1.00, tier: 1, name: "AP News" },
+    "bbc.com":            { weight: 0.97, tier: 1, name: "BBC" },
+    "bbc.co.uk":          { weight: 0.97, tier: 1, name: "BBC" },
+    "npr.org":            { weight: 0.95, tier: 1, name: "NPR" },
+    "pbs.org":            { weight: 0.93, tier: 1, name: "PBS" },
 
-    // Tier 2 — Major national newspapers
-    "theguardian.com": { weight: 0.85, tier: 2 },
-    "nytimes.com": { weight: 0.85, tier: 2 },
-    "washingtonpost.com": { weight: 0.85, tier: 2 },
-    "aljazeera.com": { weight: 0.82, tier: 2 },
-    "thehindu.com": { weight: 0.82, tier: 2 },
-    "bloomberg.com": { weight: 0.82, tier: 2 },
-    "economist.com": { weight: 0.80, tier: 2 },
-    "ft.com": { weight: 0.80, tier: 2 },
+    // ── TIER 2: Major newspapers & broadcasters ──
+    "theguardian.com":    { weight: 0.88, tier: 2, name: "The Guardian" },
+    "nytimes.com":        { weight: 0.88, tier: 2, name: "NY Times" },
+    "washingtonpost.com": { weight: 0.87, tier: 2, name: "Washington Post" },
+    "bloomberg.com":      { weight: 0.87, tier: 2, name: "Bloomberg" },
+    "economist.com":      { weight: 0.86, tier: 2, name: "The Economist" },
+    "ft.com":             { weight: 0.86, tier: 2, name: "Financial Times" },
+    "aljazeera.com":      { weight: 0.84, tier: 2, name: "Al Jazeera" },
+    "thehindu.com":       { weight: 0.84, tier: 2, name: "The Hindu" },
+    "wsj.com":            { weight: 0.85, tier: 2, name: "Wall Street Journal" },
+    "forbes.com":         { weight: 0.80, tier: 2, name: "Forbes" },
+    "time.com":           { weight: 0.82, tier: 2, name: "TIME" },
+    "usatoday.com":       { weight: 0.80, tier: 2, name: "USA Today" },
 
-    // Tier 3 — Major news channels + regional
-    "ndtv.com": { weight: 0.75, tier: 3 },
-    "hindustantimes.com": { weight: 0.75, tier: 3 },
-    "timesofindia.com": { weight: 0.72, tier: 3 },
-    "indianexpress.com": { weight: 0.72, tier: 3 },
-    "cnn.com": { weight: 0.70, tier: 3 },
-    "foxnews.com": { weight: 0.65, tier: 3 },
-    "abcnews.go.com": { weight: 0.70, tier: 3 },
-    "cbsnews.com": { weight: 0.70, tier: 3 },
+    // ── TIER 3: Major regional / TV news ──
+    "ndtv.com":           { weight: 0.76, tier: 3, name: "NDTV" },
+    "hindustantimes.com": { weight: 0.75, tier: 3, name: "Hindustan Times" },
+    "timesofindia.com":   { weight: 0.74, tier: 3, name: "Times of India" },
+    "indianexpress.com":  { weight: 0.75, tier: 3, name: "Indian Express" },
+    "cnn.com":            { weight: 0.74, tier: 3, name: "CNN" },
+    "cbsnews.com":        { weight: 0.74, tier: 3, name: "CBS News" },
+    "abcnews.go.com":     { weight: 0.73, tier: 3, name: "ABC News" },
+    "nbcnews.com":        { weight: 0.73, tier: 3, name: "NBC News" },
+    "foxnews.com":        { weight: 0.65, tier: 3, name: "Fox News" },
+    "sky.com":            { weight: 0.74, tier: 3, name: "Sky News" },
+    "deccanherald.com":   { weight: 0.72, tier: 3, name: "Deccan Herald" },
+    "theprint.in":        { weight: 0.73, tier: 3, name: "The Print" },
+    "scroll.in":          { weight: 0.72, tier: 3, name: "Scroll" },
+    "thewire.in":         { weight: 0.71, tier: 3, name: "The Wire" },
 
-    // Default for unknown sources
-    "default": { weight: 0.50, tier: 4 },
+    // ── DEFAULT ──
+    "default":            { weight: 0.45, tier: 4, name: "Unknown Source" },
 };
 
 function getSourceInfo(url) {
     try {
         const domain = new URL(url).hostname.replace("www.", "");
-        return SOURCE_WEIGHTS[domain] || { ...SOURCE_WEIGHTS["default"], domain };
+        const info   = SOURCE_WEIGHTS[domain];
+        return info
+            ? { ...info, domain }
+            : { ...SOURCE_WEIGHTS["default"], domain };
     } catch {
-        return SOURCE_WEIGHTS["default"];
+        return { ...SOURCE_WEIGHTS["default"], domain: "unknown" };
     }
 }
 
-// Source count boost — more confirmations = more trust
-function sourceCountBoost(confirmedSourceCount) {
-    if (confirmedSourceCount >= 6) return 15;
-    if (confirmedSourceCount >= 4) return 10;
-    if (confirmedSourceCount >= 2) return 8;
-    if (confirmedSourceCount === 1) return -10; // only 1 source = risky
+// Legacy export kept for any existing callers
+function sourceCountBoost(confirmedCount) {
+    if (confirmedCount >= 6) return 20;
+    if (confirmedCount >= 4) return 15;
+    if (confirmedCount >= 2) return 10;
+    if (confirmedCount >= 1) return 5;
     return 0;
 }
 
-module.exports = { getSourceInfo, sourceCountBoost };
+module.exports = { SOURCE_WEIGHTS, getSourceInfo, sourceCountBoost };
