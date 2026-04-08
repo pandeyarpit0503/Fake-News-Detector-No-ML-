@@ -86,6 +86,9 @@ export default function HistoryDetail() {
                                 matchScore: parseFloat(a.match_score),
                                 tier: a.source_tier,
                                 signals: {
+                                    semanticScore: a.semantic_score == null ? undefined : parseFloat(a.semantic_score),
+                                    titleSemanticScore: a.title_semantic_score == null ? undefined : parseFloat(a.title_semantic_score),
+                                    intentScore: a.intent_score == null ? undefined : parseFloat(a.intent_score),
                                     keywordScore: parseFloat(a.keyword_score),
                                     entityScore: parseFloat(a.entity_score),
                                     contradictionPenalty: parseFloat(a.contradiction_penalty),

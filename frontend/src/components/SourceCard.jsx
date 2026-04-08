@@ -63,20 +63,26 @@ export default function SourceCard({ article, index }) {
                         <div className="absolute bottom-7 right-0 bg-slate-900 border border-slate-700 rounded-xl p-3 text-xs z-50 min-w-[200px] shadow-xl">
                             <p className="font-semibold text-slate-200 mb-2">Score Signals</p>
                             {[
-                                ["Keyword", article.signals.keywordScore, "+"],
-                                ["Entity Match", article.signals.entityScore, "+"],
+                                ["Semantic", article.signals.semanticScore ?? article.signals.keywordScore, "+"],
+                                ["Title Semantic", article.signals.titleSemanticScore, "+"],
+                                ["Intent", article.signals.intentScore ?? article.signals.entityScore, "+"],
                                 ["Contradiction", article.signals.contradictionPenalty, ""],
                                 ["Num Mismatch", article.signals.numberPenalty, ""],
                                 ["Recency", `×${article.signals.recencyMultiplier}`, ""],
                                 ["Src Weight", `×${article.signals.sourceWeight}`, ""],
-                            ].map(([label, val, prefix]) => (
-                                <div key={label} className="flex justify-between gap-4 py-0.5">
-                                    <span className="text-slate-400">{label}</span>
-                                    <span className={`font-mono ${String(val).startsWith("-") ? "text-red-400" : "text-slate-300"}`}>
-                                        {prefix}{val}
-                                    </span>
-                                </div>
-                            ))}
+                            ].map(([label, val, prefix]) => {
+                                const isMissing = val === undefined || val === null || Number.isNaN(val);
+                                const displayValue = isMissing ? "—" : `${prefix}${val}`;
+
+                                return (
+                                    <div key={label} className="flex justify-between gap-4 py-0.5">
+                                        <span className="text-slate-400">{label}</span>
+                                        <span className={`font-mono ${String(displayValue).startsWith("-") ? "text-red-400" : "text-slate-300"}`}>
+                                            {displayValue}
+                                        </span>
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

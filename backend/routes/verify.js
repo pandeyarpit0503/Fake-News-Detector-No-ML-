@@ -8,8 +8,9 @@ const { extractEntities }             = require("../utils/entities");
 const { detectTopic }                 = require("../utils/topicDetect");
 const { buildPreciseQuery }           = require("../utils/smartQueryBuilder");
 const { validateArticle,
-        clearRequestCache }           = require("../utils/articleValidator");
-const { getMasterScore, getVerdict }  = require("../utils/scoring");
+        clearRequestCache }           = require("../utils/semanticArticleValidator");
+const { getMasterScore, getVerdict }  = require("../utils/semanticScoring");
+const { findSemanticMatches }         = require("../utils/semanticSearch");
 const { getSourceInfo }              = require("../utils/sources");
 const {
   saveSearch,
@@ -174,13 +175,26 @@ router.post("/", optionalAuth, async (req, res) => {
 
     console.log("\n🔬 VALIDATING ARTICLES...");
 
+    const semanticCandidates = await findSemanticMatches(news, allArticles, {
+      limit: 24,
+      corpusLimit: 250,
+    });
+
+    console.log(`\nSemantic candidates: ${semanticCandidates.length}`);
+    semanticCandidates.forEach((article, index) => {
+      console.log(
+        `  [${index + 1}] ${(article._semanticRankScore * 100).toFixed(1)}% ` +
+        `"${(article.title || "").substring(0, 70)}"`
+      );
+    });
+
     const validArticles          = [];
     const contradictingArticles  = [];
     const rejectedArticles       = [];
 
     // Run all validations in parallel for speed
     const validationResults = await Promise.all(
-      allArticles.map(async article => ({
+      semanticCandidates.map(async article => ({
         article,
         validation: await validateArticle(news, article),
       }))
@@ -262,7 +276,7 @@ router.post("/", optionalAuth, async (req, res) => {
 
     // ── STEP 6: Score valid articles ──────────────────────────────────────────
     // getMasterScore is synchronous — runs the keyword+entity+recency scorer
-    const scoreResult = getMasterScore(validArticles, factCheckClaims, news);
+    const scoreResult = await getMasterScore(validArticles, factCheckClaims, news);
 
     // Apply contradiction penalty (-8 pts per contradicting source)
     if (contradictingArticles.length > 0) {
@@ -329,7 +343,7 @@ router.post("/", optionalAuth, async (req, res) => {
         trustScore,
         verdict:          verdict.label,
         confirmedSources: scoreResult.confirmedCount || 0,
-        totalSources:     validArticles.length,
+        totalSources:     semanticCandidates.length,
         factCheckBonus:   scoreResult.factBonus      || 0,
         sourceCountBoost: scoreResult.countBoost     || 0,
       });
@@ -355,7 +369,7 @@ router.post("/", optionalAuth, async (req, res) => {
       topicInfo,
       matchedArticles,
       factCheckResults,
-      totalSourcesChecked: validArticles.length,
+      totalSourcesChecked: semanticCandidates.length,
       confirmedSources:    scoreResult.confirmedCount || 0,
       tier1Sources:        scoreResult.tier1Count     || 0,
       scoreBreakdown: {
@@ -371,6 +385,7 @@ router.post("/", optionalAuth, async (req, res) => {
       },
       pipeline: {
         fetched:          allArticles.length,
+        semanticCandidates: semanticCandidates.length,
         accepted:         validArticles.length,
         contradicting:    contradictingArticles.length,
         rejected:         rejectedArticles.length,

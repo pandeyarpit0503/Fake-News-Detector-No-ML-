@@ -1,4 +1,14 @@
+const crypto = require("crypto");
 const pool = require("./connection");
+
+function md5(value) {
+    return crypto.createHash("md5").update(String(value || "")).digest("hex");
+}
+
+function toNumberOr(defaultValue, value) {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : defaultValue;
+}
 
 // ── USERS ─────────────────────────────────────────────────────────────────────
 
@@ -146,6 +156,89 @@ async function findCachedSearch(newsText) {
 
 // ── MATCHED ARTICLES ──────────────────────────────────────────────────────────
 
+async function upsertSemanticArticles(articles) {
+    const values = (articles || [])
+        .filter(a => a?.url && Array.isArray(a.embeddingVector) && a.embeddingVector.length > 0)
+        .map(a => [
+            md5(a.url),
+            (a.url || "").substring(0, 1000),
+            (a.title || "").substring(0, 500),
+            a.description || "",
+            a.contentExcerpt || "",
+            (a.sourceName || a.source?.name || "Unknown").substring(0, 100),
+            (a.sourceDomain || getDomain(a.url || "")).substring(0, 100),
+            a.publishedAt || null,
+            a.articleText || "",
+            JSON.stringify(a.embeddingVector),
+        ]);
+
+    if (values.length === 0) {
+        return 0;
+    }
+
+    try {
+        await pool.query(
+            `INSERT INTO semantic_articles
+         (url_hash, url, title, description, content_excerpt,
+          source_name, source_domain, published_at, article_text, embedding_vector)
+       VALUES ?
+       ON DUPLICATE KEY UPDATE
+         title            = VALUES(title),
+         description      = VALUES(description),
+         content_excerpt  = VALUES(content_excerpt),
+         source_name      = VALUES(source_name),
+         source_domain    = VALUES(source_domain),
+         published_at     = VALUES(published_at),
+         article_text     = VALUES(article_text),
+         embedding_vector = VALUES(embedding_vector),
+         last_seen_at     = CURRENT_TIMESTAMP`,
+            [values]
+        );
+
+        return values.length;
+    } catch (err) {
+        console.warn("upsertSemanticArticles skipped:", err.message);
+        return 0;
+    }
+}
+
+async function getRecentSemanticArticles(limit = 250) {
+    try {
+        const [rows] = await pool.query(
+            `SELECT
+          url, title, description, content_excerpt, source_name,
+          source_domain, published_at, article_text, embedding_vector
+       FROM semantic_articles
+       ORDER BY COALESCE(published_at, last_seen_at) DESC, last_seen_at DESC
+       LIMIT ?`,
+            [limit]
+        );
+
+        return rows
+            .map(row => {
+                try {
+                    return {
+                        url: row.url,
+                        title: row.title,
+                        description: row.description,
+                        content: row.content_excerpt,
+                        source: row.source_name ? { name: row.source_name } : null,
+                        sourceDomain: row.source_domain,
+                        publishedAt: row.published_at,
+                        articleText: row.article_text,
+                        embeddingVector: JSON.parse(row.embedding_vector || "[]"),
+                    };
+                } catch {
+                    return null;
+                }
+            })
+            .filter(Boolean);
+    } catch (err) {
+        console.warn("getRecentSemanticArticles skipped:", err.message);
+        return [];
+    }
+}
+
 function getDomain(url) {
     try { return new URL(url).hostname.replace("www.", ""); }
     catch { return "unknown"; }
@@ -167,27 +260,58 @@ async function saveMatchedArticles(searchId, articles) {
             (a.source       || "Unknown").substring(0, 100),                 // source_name
             (a.sourceDomain || getDomain(a.url || "")).substring(0, 100),    // source_domain
             a.tier                           || 4,                           // source_tier
-            a.signals?.sourceWeight          || 0.50,                        // source_weight
-            a.matchScore                     || 0,                           // match_score
+            toNumberOr(0.50, a.signals?.sourceWeight),                       // source_weight
+            toNumberOr(0, a.matchScore),                                     // match_score
+            toNumberOr(0, a.signals?.semanticScore),                         // semantic_score
+            toNumberOr(0, a.signals?.titleSemanticScore),                    // title_semantic_score
+            toNumberOr(0, a.signals?.intentScore),                           // intent_score
             a.publishedAt                    || null,                        // published_at
-            a.signals?.keywordScore          || 0,                           // keyword_score
-            a.signals?.entityScore           || 0,                           // entity_score
-            a.signals?.contradictionPenalty  || 0,                           // contradiction_penalty
-            a.signals?.numberPenalty         || 0,                           // number_penalty
-            a.signals?.recencyMultiplier     || 0.7,                         // recency_multiplier
+            toNumberOr(0, a.signals?.keywordScore),                          // keyword_score
+            toNumberOr(0, a.signals?.entityScore),                           // entity_score
+            toNumberOr(0, a.signals?.contradictionPenalty),                  // contradiction_penalty
+            toNumberOr(0, a.signals?.numberPenalty),                         // number_penalty
+            toNumberOr(0.7, a.signals?.recencyMultiplier),                   // recency_multiplier
         ]);
 
         console.log("📋 First article row sample:", values[0]);
 
-        await pool.query(
-            `INSERT INTO matched_articles
-         (search_id, title, url, source_name, source_domain,
-          source_tier, source_weight, match_score, published_at,
-          keyword_score, entity_score, contradiction_penalty,
-          number_penalty, recency_multiplier)
-       VALUES ?`,
-            [values]
-        );
+        try {
+            await pool.query(
+                `INSERT INTO matched_articles
+           (search_id, title, url, source_name, source_domain,
+            source_tier, source_weight, match_score, semantic_score,
+            title_semantic_score, intent_score, published_at,
+            keyword_score, entity_score, contradiction_penalty,
+            number_penalty, recency_multiplier)
+         VALUES ?`,
+                [values]
+            );
+        } catch (err) {
+            if (!String(err.message).includes("Unknown column")) throw err;
+
+            const legacyValues = values.map(([
+                rowSearchId, title, url, sourceName, sourceDomain,
+                sourceTier, sourceWeight, matchScore, _semanticScore,
+                _titleSemanticScore, _intentScore, publishedAt,
+                keywordScore, entityScore, contradictionPenalty,
+                numberPenalty, recencyMultiplier,
+            ]) => [
+                rowSearchId, title, url, sourceName, sourceDomain,
+                sourceTier, sourceWeight, matchScore, publishedAt,
+                keywordScore, entityScore, contradictionPenalty,
+                numberPenalty, recencyMultiplier,
+            ]);
+
+            await pool.query(
+                `INSERT INTO matched_articles
+           (search_id, title, url, source_name, source_domain,
+            source_tier, source_weight, match_score, published_at,
+            keyword_score, entity_score, contradiction_penalty,
+            number_penalty, recency_multiplier)
+         VALUES ?`,
+                [legacyValues]
+            );
+        }
 
         console.log(`✅ ${articles.length} articles saved successfully`);
     } catch (err) {
@@ -282,6 +406,8 @@ module.exports = {
     getSearchById,
     getRecentSearches,
     findCachedSearch,
+    upsertSemanticArticles,
+    getRecentSemanticArticles,
     saveMatchedArticles,
     saveFactCheckResults,
     updateDailyStats,

@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS matched_articles (
   source_tier           INT,
   source_weight         DECIMAL(3,2),
   match_score           DECIMAL(5,2),
+  semantic_score        DECIMAL(5,2),
+  title_semantic_score  DECIMAL(5,2),
+  intent_score          DECIMAL(5,2),
   published_at          TIMESTAMP NULL,
   keyword_score         DECIMAL(5,2),
   entity_score          DECIMAL(5,2),
@@ -54,7 +57,28 @@ CREATE TABLE IF NOT EXISTS matched_articles (
   INDEX idx_search_id (search_id)
 );
 
--- TABLE 4: fact_check_results
+-- TABLE 4: semantic_articles
+CREATE TABLE IF NOT EXISTS semantic_articles (
+  semantic_article_id INT AUTO_INCREMENT PRIMARY KEY,
+  url_hash            VARCHAR(32) UNIQUE NOT NULL,
+  url                 VARCHAR(1000) NOT NULL,
+  title               VARCHAR(500),
+  description         TEXT,
+  content_excerpt     MEDIUMTEXT,
+  source_name         VARCHAR(100),
+  source_domain       VARCHAR(100),
+  published_at        TIMESTAMP NULL,
+  article_text        MEDIUMTEXT NOT NULL,
+  embedding_vector    MEDIUMTEXT NOT NULL,
+  first_seen_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_seen_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                      ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_source_domain (source_domain),
+  INDEX idx_published_at (published_at),
+  INDEX idx_last_seen_at (last_seen_at)
+);
+
+-- TABLE 5: fact_check_results
 CREATE TABLE IF NOT EXISTS fact_check_results (
   fact_check_id INT AUTO_INCREMENT PRIMARY KEY,
   search_id     INT NOT NULL,                      -- FK → searches.search_id
@@ -67,7 +91,7 @@ CREATE TABLE IF NOT EXISTS fact_check_results (
   INDEX idx_search_id (search_id)
 );
 
--- TABLE 5: search_stats (daily aggregates)
+-- TABLE 6: search_stats (daily aggregates)
 CREATE TABLE IF NOT EXISTS search_stats (
   stat_id          INT AUTO_INCREMENT PRIMARY KEY,
   stat_date        DATE UNIQUE DEFAULT (CURRENT_DATE),
