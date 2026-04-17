@@ -8,39 +8,53 @@ import StatsSection from "./components/sections/StatsSection";
 import { getToken } from "./utils/api";
 
 export default function App() {
-  // Restore user from localStorage on mount so sessions survive refresh
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem("user");
     const token = getToken();
     if (stored && token) {
-      try { return JSON.parse(stored); } catch { return null; }
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return null;
+      }
     }
     return null;
   });
+
   const [sessionMsg, setSessionMsg] = useState("");
+
+  const authElement = (initialTab = "login") =>
+    user ? (
+      <Navigate to="/dashboard" replace />
+    ) : (
+      <AuthPage
+        setUser={setUser}
+        sessionMsg={sessionMsg}
+        setSessionMsg={setSessionMsg}
+        initialTab={initialTab}
+      />
+    );
 
   return (
     <BrowserRouter>
       <Routes>
-        {/* Auth route — redirect to dashboard if already logged in */}
-        <Route
-          path="/auth"
-          element={
-            user
-              ? <Navigate to="/dashboard" replace />
-              : <AuthPage setUser={setUser} sessionMsg={sessionMsg} setSessionMsg={setSessionMsg} />
-          }
-        />
+        <Route path="/auth" element={authElement("login")} />
+        <Route path="/login" element={authElement("login")} />
+        <Route path="/signup" element={authElement("signup")} />
 
-        {/* Protected routes — redirect to auth if not logged in */}
         <Route
           element={
-            user
-              ? <DashboardLayout user={user} setUser={setUser} />
-              : <Navigate to="/auth" replace />
+            user ? (
+              <DashboardLayout user={user} setUser={setUser} />
+            ) : (
+              <Navigate to="/auth" replace />
+            )
           }
         >
-          <Route path="/dashboard" element={<AnalyzeSection username={user?.username || user?.email} />} />
+          <Route
+            path="/dashboard"
+            element={<AnalyzeSection username={user?.username || user?.email} />}
+          />
           <Route path="/history" element={<HistorySection />} />
           <Route path="/stats" element={<StatsSection />} />
         </Route>

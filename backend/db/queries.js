@@ -10,6 +10,17 @@ function toNumberOr(defaultValue, value) {
     return Number.isFinite(num) ? num : defaultValue;
 }
 
+function toMySqlTimestamp(value) {
+    if (!value) return null;
+
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    const pad = (part) => String(part).padStart(2, "0");
+
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())} ${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())}:${pad(date.getUTCSeconds())}`;
+}
+
 // ── USERS ─────────────────────────────────────────────────────────────────────
 
 async function createUser(email, passwordHash) {
@@ -167,7 +178,7 @@ async function upsertSemanticArticles(articles) {
             a.contentExcerpt || "",
             (a.sourceName || a.source?.name || "Unknown").substring(0, 100),
             (a.sourceDomain || getDomain(a.url || "")).substring(0, 100),
-            a.publishedAt || null,
+            toMySqlTimestamp(a.publishedAt),
             a.articleText || "",
             JSON.stringify(a.embeddingVector),
         ]);
@@ -265,7 +276,7 @@ async function saveMatchedArticles(searchId, articles) {
             toNumberOr(0, a.signals?.semanticScore),                         // semantic_score
             toNumberOr(0, a.signals?.titleSemanticScore),                    // title_semantic_score
             toNumberOr(0, a.signals?.intentScore),                           // intent_score
-            a.publishedAt                    || null,                        // published_at
+            toMySqlTimestamp(a.publishedAt),                                 // published_at
             toNumberOr(0, a.signals?.keywordScore),                          // keyword_score
             toNumberOr(0, a.signals?.entityScore),                           // entity_score
             toNumberOr(0, a.signals?.contradictionPenalty),                  // contradiction_penalty

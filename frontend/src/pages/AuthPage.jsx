@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, setToken } from "../utils/api";
 import LoadingSpinner from "../components/shared/LoadingSpinner";
@@ -28,9 +28,13 @@ function Field({ label, type, value, onChange, error, placeholder, show, onToggl
     );
 }
 
-export default function AuthPage({ setUser, sessionMsg, setSessionMsg }) {
+function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+}
+
+export default function AuthPage({ setUser, sessionMsg, setSessionMsg, initialTab = "login" }) {
     const navigate = useNavigate();
-    const [tab, setTab] = useState("login");
+    const [tab, setTab] = useState(initialTab === "signup" ? "signup" : "login");
     const [loading, setLoading] = useState(false);
     const [banner, setBanner] = useState(sessionMsg ? { type: "error", text: sessionMsg } : null);
 
@@ -47,6 +51,10 @@ export default function AuthPage({ setUser, sessionMsg, setSessionMsg }) {
     const [showSignupPass, setShowSignupPass] = useState(false);
     const [showSignupConfirm, setShowSignupConfirm] = useState(false);
     const [signupErrors, setSignupErrors] = useState({});
+
+    useEffect(() => {
+        setTab(initialTab === "signup" ? "signup" : "login");
+    }, [initialTab]);
 
     const switchTab = (t) => {
         setTab(t);
@@ -83,16 +91,17 @@ export default function AuthPage({ setUser, sessionMsg, setSessionMsg }) {
         setLoading(true);
         setBanner(null);
         try {
-            const res = await api.login(loginEmail, loginPass);
+            const email = normalizeEmail(loginEmail);
+            const res = await api.login(email, loginPass);
             const { token, user } = res.data;
             setToken(token);
-            const userData = { username: user?.email || loginEmail, email: user?.email || loginEmail, user_id: user?.user_id, token };
+            const userData = { username: user?.email || email, email: user?.email || email, user_id: user?.user_id, token };
             localStorage.setItem("user", JSON.stringify(userData));
             setUser(userData);
             navigate("/dashboard", { replace: true });
         } catch (err) {
             const msg = err.response?.status === 401
-                ? "Invalid email or password"
+                ? "Invalid email or password. If you're new here, create an account first."
                 : err.response?.data?.error || "Login failed. Please try again.";
             setBanner({ type: "error", text: msg });
         } finally {
@@ -106,7 +115,7 @@ export default function AuthPage({ setUser, sessionMsg, setSessionMsg }) {
         setLoading(true);
         setBanner(null);
         try {
-            await api.signup(signupEmail, signupPass);
+            await api.signup(normalizeEmail(signupEmail), signupPass);
             switchTab("login");
             setBanner({ type: "success", text: "Account created! Please log in." });
         } catch (err) {

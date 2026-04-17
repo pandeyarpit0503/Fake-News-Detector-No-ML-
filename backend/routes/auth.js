@@ -3,10 +3,15 @@ const router = express.Router();
 const { createUser, getUserByEmail, getUserById } = require('../db/queries');
 const { hashPassword, comparePassword, generateToken, authenticateToken } = require('../utils/auth');
 
+function normalizeEmail(email) {
+    return String(email || "").trim().toLowerCase();
+}
+
 // POST /api/auth/signup
 router.post('/signup', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = normalizeEmail(req.body?.email);
+        const { password } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required.' });
@@ -40,7 +45,8 @@ router.post('/signup', async (req, res) => {
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const email = normalizeEmail(req.body?.email);
+        const { password } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email and password are required.' });
